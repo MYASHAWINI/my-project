@@ -17,7 +17,7 @@ while (true) {
         let result = choice === 1 ? add(a, b) :
                     choice === 2 ? subtract(a, b) :
                     choice === 3 ? multiply(a, b) :
-                    divide(a, b);
+                    choice === 4 ? divide(a, b);
 
         console.log("Result:", result);
         storeToMemory(result);
@@ -39,7 +39,7 @@ while (true) {
         let index = parseInt(prompt("Enter memory index: "));
         console.log("Retrieved Value:", getFromMemory(index));
     } else {
-        console.log("Invalid choice, please try again.");
+        console.log("⚠️ Invalid choice, please try again by entering a **valid option** (1-12).");
     }
 }
 
