@@ -21,4 +21,15 @@ function readLogHistory() {
     }
 }
 
-module.exports = { logOperation, readLogHistory };
+// Function to clear logs
+function clearLogs() {
+    try {
+        fs.writeFileSync(logFile, "", "utf8"); // Overwrites file with an empty string
+        console.log("✅ Logs cleared successfully!");
+    } catch (err) {
+        console.error("Error clearing log file:", err);
+    }
+}
+
+module.exports = { logOperation, readLogHistory, clearLogs };
+
