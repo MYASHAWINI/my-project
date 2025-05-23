@@ -1,4 +1,3 @@
-
 function validateNumber(num) {
     return !isNaN(num) && typeof num === "number";
 }
