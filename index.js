@@ -44,3 +44,22 @@ while (true) {
 }
 
 console.log("Exiting... Thank you!");
+
+const { logOperation, readLogHistory } = require("./modules/logger");
+View Log History\n6. Exit");
+
+    if (choice === 13) {
+        console.log("\n📜 Calculation History:\n");
+        console.log(readLogHistory());
+        continue;
+    }
+    if (choice === 14) break;
+    let input = prompt("Enter input values: ");
+    let result = choice === 1 ? add(...input.split(",").map(Number)) :
+                 choice === 2 ? divide(...input.split(",").map(Number)) :
+                 choice === 3 ? sortSequence(input.split(",").map(Number)) :
+                 findMode(input.split(",").map(Number));
+
+    console.log("Result:", result);
+    logOperation(`Choice ${choice}`, input, result);
+}
