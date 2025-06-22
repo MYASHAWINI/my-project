@@ -1,4 +1,4 @@
-#Subscriptions Schema (MongoDB)
+### Subscriptions Schema (MongoDB)
 
 const mongoose = require('mongoose');
 
@@ -181,7 +181,6 @@ app.put('/subscription/pause/:userId', async (req, res) => {
     }
 });
 
-
 2. Create Email Templates
 
 <!DOCTYPE html>
@@ -342,26 +341,6 @@ app.post('/webhook', async (req, res) => {
   }
 
   res.sendStatus(200);
-});
-
-🛠 Retry Mechanism: Background Job
-
-// Every hour, scan for subscriptions eligible for retry
-cron.schedule('0 * * * *', async () => {
-  const now = new Date();
-  const subs = await Subscription.find({ inGracePeriod: true, nextRetryAt: { $lte: now } });
-
-  for (const sub of subs) {
-    const success = await attemptRetryPayment(sub); // Custom logic to trigger retry via Stripe/Razorpay
-    if (success) {
-      sub.status = 'Active';
-      sub.inGracePeriod = false;
-    } else if (sub.retryCount >= 3 && now > sub.graceEndsAt) {
-      sub.status = 'Expired';
-      sub.inGracePeriod = false;
-    }
-    await sub.save();
-  }
 });
 
 ✅ For Stripe
@@ -586,28 +565,96 @@ app.post('/admin/login', async (req, res) => {
   }
 });
 
-🧩 Dashboard Layout Styling
-💻 Layout Component
+## 💸 **Stripe-Specific Flow**
 
-export default function AdminLayout({ children }) {
-  return (
-    <div className="min-h-screen flex bg-gray-100">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-md">
-        <div className="p-4 text-xl font-bold border-b">🛠 Admin Panel</div>
-        <ul className="p-4 space-y-2 text-sm">
-          <li><a href="/dashboard" className="block p-2 rounded hover:bg-gray-200">Dashboard</a></li>
-          <li><a href="/recoveries" className="block p-2 rounded hover:bg-gray-200">Recoveries</a></li>
-          <li><a href="/analytics" className="block p-2 rounded hover:bg-gray-200">Analytics</a></li>
-        </ul>
-      </aside>
+### 🧱 **1. Create Customer**
 
-      {/* Main Content */}
-      <main className="flex-1 p-6">{children}</main>
-    </div>
-  );
-}
+When a user registers, create a **Stripe customer**:
 
-<AdminLayout>
-  <SubscriptionRecoveryPanel />
-</AdminLayout>
+const customer = await stripe.customers.create({
+  email: user.email,
+});
+user.stripeCustomerId = customer.id;
+
+---
+
+### 📦 **2. Create Checkout Session**
+
+Send product/price IDs from frontend to create a session:
+
+const session = await stripe.checkout.sessions.create({
+  customer: user.stripeCustomerId,
+  line_items: [{
+    price: 'price_ABC123', // Your Stripe Price ID
+    quantity: 1
+  }],
+  mode: 'subscription',
+  success_url: `${DOMAIN}/success?session_id={CHECKOUT_SESSION_ID}`,
+  cancel_url: `${DOMAIN}/cancel`,
+});
+res.json({ url: session.url });
+
+---
+
+### 🧾 **3. Handle Webhooks**
+
+Setup a Stripe webhook listener for these events:
+
+* `checkout.session.completed`
+* `invoice.payment_succeeded`
+* `invoice.payment_failed`
+* `customer.subscription.updated`
+* `customer.subscription.deleted`
+
+app.post('/api/subscribe/webhook', express.raw({type: 'application/json'}), (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+
+    switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object;
+        // Save subscription info to DB
+        break;
+      case 'invoice.payment_failed':
+        // Notify user or mark subscription as pending
+        break;
+      // ...handle other cases
+    }
+
+    res.status(200).json({ received: true });
+  } catch (err) {
+    res.status(400).send(`Webhook error: ${err.message}`);
+  }
+});
+
+---
+
+### 🔄 **4. Upgrade / Downgrade Plan**
+
+await stripe.subscriptions.update(subscriptionId, {
+  items: [{
+    id: subscriptionItemId,
+    price: 'price_NEW',
+  }],
+  proration_behavior: 'create_prorations',
+});
+
+---
+
+### ❌ **5. Cancel Subscription**
+
+await stripe.subscriptions.del(subscriptionId); // or use .update with cancel_at_period_end
+
+---
+
+### ▶️ **6. Resume Subscription**
+
+If canceled with `cancel_at_period_end`, resume it before it ends:
+
+await stripe.subscriptions.update(subscriptionId, {
+  cancel_at_period_end: false,
+});
+
+---
